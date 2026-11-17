@@ -1,0 +1,4 @@
+anthropic>=0.70
+requests>=2.31
+pillow>=10.0
+pyzbar>=0.1.9

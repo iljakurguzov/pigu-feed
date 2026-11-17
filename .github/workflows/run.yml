@@ -1,0 +1,51 @@
+name: pigu-feed
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # GitHub runs this roughly every 5–15 minutes
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pigu-feed
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          sudo apt-get install -y -qq libzbar0 > /dev/null
+          pip install -q -r requirements.txt
+
+      - name: Run bot + build feed
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALLOWED_CHAT_ID: ${{ secrets.TELEGRAM_ALLOWED_CHAT_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m pigu.main
+
+      - name: Commit changes
+        if: always()
+        run: |
+          git config user.name "pigu-feed-bot"
+          git config user.email "pigu-feed-bot@users.noreply.github.com"
+          git add -A data state docs
+          if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
+          git commit -q -m "feed update $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3; do
+            git pull -q --rebase origin main && git push -q && exit 0
+            sleep 5
+          done
+          exit 1
